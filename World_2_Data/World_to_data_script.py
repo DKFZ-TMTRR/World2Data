@@ -99,22 +99,25 @@ def World2Data(viewer: 'napari.viewer.Viewer', Order: int, layer_choice: str, Li
                 return 
         
         layer_list=[] 
-        if Checkbox_trivial: 
-            for layer in list_1: 
+        if Checkbox_trivial:
+            for layer in list_1:
                 img_data=layer.data
                 if isinstance(img_data, da.core.Array):
                     img_data=img_data.compute()
-                img_shape=img_data.shape 
+                img_shape=img_data.shape
                 img_rgb=layer.rgb
                 img_name=layer.name
                 Layer_tuple= (img_data, {'name': img_name+'_data', 'rgb': img_rgb})
                 layer_list.append(Layer_tuple)
             return layer_list
         
+        #if we want to adjust dtypes later, we have to save them now
         if Checkbox_datatype:
             datatypes = [l.data.dtype for l in list_1]
+            print(datatypes)
         
         for i, layer in enumerate(list_1):
+            print(i)###
             img_data=layer.data
             if isinstance(img_data, da.core.Array):
                 img_data=img_data.compute()
@@ -170,21 +173,37 @@ def World2Data(viewer: 'napari.viewer.Viewer', Order: int, layer_choice: str, Li
                 transformed_image = interpolator.transform(affine_3D, order=Order) 
             
             
+            #adjust datatype to original type?
             if Checkbox_datatype:
                 dtype = datatypes[i]
+                
+                #make sure the range of values is correct (-1,1).
+                mn = transformed_image.min()
+                if mn < -1:
+                    diff = -1 - mn
+                    print("Attention! Due to interpolation effects, the data range changed after the transformation and exceeds the minimum (-1.0).")
+                    print(f"To allow conversion to original datatype {dtype}, we normalize the data range. Make sure that the resulting image does not contain unwanted artifacts!")
+                    transformed_image = transformed_image + diff
+                mx = transformed_image.max()
+                if mx > 1:
+                    print("Attention! Due to interpolation effects, the data range changed after the transformation and exceeds the maximum (1.0).")
+                    print(f"To allow conversion to original datatype {dtype}, we normalize the data range. Make sure that the resulting image does not contain unwanted artifacts!")
+                    transformed_image = transformed_image/mx
+                
+                
                 if dtype == 'uint8':
-                    dtype_transform = img_as_ubyte
+                    dtype_adjust = img_as_ubyte
                 elif dtype == 'uint16':
-                    dtype_transform = img_as_uint
+                    dtype_adjust = img_as_uint
                 elif dtype == 'int16':
-                    dtype_transform = img_as_int
+                    dtype_adjust = img_as_int
                 elif dtype == 'float32':
-                    dtype_transform = img_as_float32
+                    dtype_adjust = img_as_float32
                 else: 
-                    print(f"Unknown datatype: {dtype}, we return a float32 image")
-                    dtype_transform = img_as_float32
+                    print(f"Unsupported datatype: {dtype}, we return a float32 image")
+                    dtype_adjust = lambda img: img
                     
-                transformed_image = dtype_transform(transformed_image)
+                transformed_image = dtype_adjust(transformed_image)
             
             #add the transformed image to layers
             Layer_tuple= (transformed_image, {'name': img_name+'_data', 'rgb': img_rgb})
